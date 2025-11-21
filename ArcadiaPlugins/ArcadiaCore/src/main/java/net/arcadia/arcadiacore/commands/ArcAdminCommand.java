@@ -429,7 +429,7 @@ public class ArcAdminCommand implements CommandExecutor, TabCompleter {
         var dataManager = plugin.getDataManager();
         ArcPlayerData pd = dataManager.getOrCreate(off.getUniqueId(), realName);
 
-        // Optionally tag with staff name
+        // tag with staff name
         String writer = (sender instanceof Player p) ? p.getName() : "CONSOLE";
         pd.addNote("[" + writer + "] " + note);
         dataManager.saveAll();
