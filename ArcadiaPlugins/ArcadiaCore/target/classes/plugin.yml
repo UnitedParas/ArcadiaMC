@@ -1,0 +1,31 @@
+name: ArcadiaCore
+main: net.arcadia.arcadiacore.ArcadiaCore
+version: 1.0.0
+api-version: '1.21'
+author: Kuvvii
+description: Master plugin for ArcadiaMC
+
+commands:
+  arc:
+    description: Main Arcadia command.
+    usage: "/arc help"
+    aliases: [arcadia]
+  arcad:
+    description: Arcadia admin command.
+    usage: "/arcad <subcommand>"
+    permission: arcadia.admin
+  emote:
+    description: Arcadia emotes.
+    usage: "/emote <kiss|mog|smack> [player]"
+  ademote:
+    description: Admin emotes.
+    usage: "/ademote <shinderu|poof|smite|supermog> [player]"
+  modcall:
+    description: Request staff assistance.
+    usage: "/modcall"
+  shika:
+    description: Deer.
+    usage: "/shika"
+  sail:
+    description: Boost your boat with Sail.
+    usage: /sail
