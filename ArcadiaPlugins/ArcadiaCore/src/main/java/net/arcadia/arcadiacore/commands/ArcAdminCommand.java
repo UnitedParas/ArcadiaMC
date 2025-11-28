@@ -148,16 +148,35 @@ public class ArcAdminCommand implements CommandExecutor, TabCompleter {
                 target.getName() != null ? target.getName() : targetName
         );
 
+        // NOTE: ArcPlayerData getters return Set<String>, so we match that.
+        Set<String> grants = pd.getGrants();
+        Set<String> revokes = pd.getRevokes();
+
         switch (action) {
             case "grant" -> {
+                // If they already have this grant, don't double-add it.
+                if (grants.contains(cmdKey)) {
+                    sender.sendMessage(ChatColor.RED + targetName + " already has cmdperm key '" + cmdKey + "'.");
+                    return true;
+                }
+
                 pd.grantCommand(cmdKey);
                 sender.sendMessage(ChatColor.GREEN + "Granted " + cmdKey + " to " + targetName + ".");
             }
             case "revoke" -> {
+                // If they don't have *any* entry for this key, warn instead of silently doing nothing.
+                if (!grants.contains(cmdKey) && !revokes.contains(cmdKey)) {
+                    sender.sendMessage(ChatColor.RED + targetName + " has no cmdperm entry for '" + cmdKey + "'.");
+                    return true;
+                }
+
                 pd.revokeCommand(cmdKey);
                 sender.sendMessage(ChatColor.YELLOW + "Revoked " + cmdKey + " from " + targetName + ".");
             }
-            default -> sender.sendMessage(ChatColor.RED + "Unknown action. Use grant or revoke.");
+            default -> {
+                sender.sendMessage(ChatColor.RED + "Unknown action. Use grant or revoke.");
+                return true;
+            }
         }
 
         dataManager.saveAll();
@@ -206,28 +225,66 @@ public class ArcAdminCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    // ========== /arcad data ... (admin-side data ops) ==========
+    // ========== /arcad data ... (admin-side data ops + view) ==========
 
     @SuppressWarnings("deprecation")
     private boolean handleDataAdmin(CommandSender sender, String label, String[] args) {
-        // For now: modcall add/remove/reset for a player.
-        // /arcad data <player> add modcalls <n>
-        // /arcad data <player> remove modcalls <n>
-        // /arcad data <player> reset <modcalls|grants|revokes>
+        // VIEW:
+        //   /arcad data <player>
+        //
+        // MODIFY (existing behavior):
+        //   /arcad data <player> add modcalls <n>
+        //   /arcad data <player> remove modcalls <n>
+        //   /arcad data <player> reset <modcalls|grants|revokes>
 
-        if (args.length < 2) {
-            sender.sendMessage(ChatColor.YELLOW + "Usage: /" + label + " data <player> <...>");
+        if (args.length == 0) {
+            sender.sendMessage(ChatColor.YELLOW + "Usage: /" + label + " data <player> [reset|add|remove] ...");
             return true;
         }
 
         String targetName = args[0];
-        String sub = args[1].toLowerCase(Locale.ROOT);
-
         OfflinePlayer off = Bukkit.getOfflinePlayer(targetName);
         String realName = off.getName() != null ? off.getName() : targetName;
 
         var dataManager = plugin.getDataManager();
         ArcPlayerData pd = dataManager.getOrCreate(off.getUniqueId(), realName);
+
+        // --- Simple view: /arcad data <player> ---
+        if (args.length == 1) {
+            sender.sendMessage(ChatColor.AQUA + realName + "'s Data:");
+            sender.sendMessage(ChatColor.AQUA + "UUID: " + ChatColor.WHITE + off.getUniqueId());
+            sender.sendMessage(ChatColor.AQUA + "Server rank: " + ChatColor.WHITE + pd.getRank().name());
+            sender.sendMessage(ChatColor.AQUA + "Modcalls: " + ChatColor.WHITE + pd.getModcalls());
+            sender.sendMessage(ChatColor.AQUA + "Modcall muted: " + ChatColor.WHITE + (pd.isModcallMuted() ? "yes" : "no"));
+
+            String grants = pd.getGrants().isEmpty()
+                    ? "(none)"
+                    : String.join(", ", pd.getGrants());
+            String revokes = pd.getRevokes().isEmpty()
+                    ? "(none)"
+                    : String.join(", ", pd.getRevokes());
+
+            sender.sendMessage(ChatColor.AQUA + "Grants: " + ChatColor.WHITE + grants);
+            sender.sendMessage(ChatColor.AQUA + "Revokes: " + ChatColor.WHITE + revokes);
+
+            // Notes summary
+            List<String> notes = pd.getNotes();
+            sender.sendMessage(ChatColor.AQUA + "Notes (" + notes.size() + "):");
+            if (notes.isEmpty()) {
+                sender.sendMessage(ChatColor.GRAY + "  (no notes)");
+            } else {
+                int i = 1;
+                for (String n : notes) {
+                    sender.sendMessage(ChatColor.GRAY + "  " + (i++) + ". " + n);
+                }
+            }
+
+            return true;
+        }
+
+        // --- Existing subcommand behavior below ---
+
+        String sub = args[1].toLowerCase(Locale.ROOT);
 
         if (sub.equals("reset")) {
             if (args.length < 3) {

@@ -1,6 +1,7 @@
 package net.arcadia.arcadiacore.data;
 
 import net.arcadia.arcadiacore.ArcadiaCore;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -38,6 +39,13 @@ public class DataManager {
 
     // ========== SAVE / LOAD ==========
 
+    /**
+     * Saves all player data:
+     * - One YAML per player under data/<RANK>/<name>.yml
+     *   (including wallet balances, which are the *authoritative* money source)
+     * - A summary per currency under data/currency/<currency>.yml
+     *   ("circulation" field is derived from all wallets and will be overwritten).
+     */
     public void saveAll() {
         File dataRoot = new File(plugin.getDataFolder(), "data");
 
@@ -59,6 +67,9 @@ public class DataManager {
                 dir.mkdirs();
             }
         }
+
+        // For total circulation per currency
+        Map<String, Double> circulation = new HashMap<>();
 
         // Now save each player into their rank folder, filename = username.yml
         for (ArcPlayerData pd : dataMap.values()) {
@@ -86,11 +97,53 @@ public class DataManager {
             cfg.set("revokes", new ArrayList<>(pd.getRevokes()));
             cfg.set("notes", new ArrayList<>(pd.getNotes()));
 
+            // wallet: currency -> amount
+            cfg.set("wallet", null);
+            if (!pd.getWallet().isEmpty()) {
+                for (Map.Entry<String, Double> e : pd.getWallet().entrySet()) {
+                    cfg.set("wallet." + e.getKey(), e.getValue());
+                    // update circulation
+                    circulation.merge(e.getKey(), e.getValue(), Double::sum);
+                }
+            }
+
             try {
                 cfg.save(file);
             } catch (IOException e) {
                 plugin.getLogger().warning("[ArcadiaCore] Failed to save player file " +
                         file.getAbsolutePath() + ": " + e.getMessage());
+            }
+        }
+
+        // === Currency totals folder (derived) ===
+        File currencyDir = new File(dataRoot, "currency");
+        if (!currencyDir.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            currencyDir.mkdirs();
+        }
+
+        File[] old = currencyDir.listFiles();
+        if (old != null) {
+            for (File f : old) {
+                if (f.isFile()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                }
+            }
+        }
+
+        for (Map.Entry<String, Double> e : circulation.entrySet()) {
+            String safe = sanitizeFileName(e.getKey());
+            if (safe.isEmpty()) safe = "unknown";
+            File file = new File(currencyDir, safe + ".yml");
+            YamlConfiguration cfg = new YamlConfiguration();
+            cfg.set("name", e.getKey());
+            cfg.set("circulation", e.getValue());
+            try {
+                cfg.save(file);
+            } catch (IOException ex) {
+                plugin.getLogger().warning("[ArcadiaCore] Failed to save currency file "
+                        + file.getAbsolutePath() + ": " + ex.getMessage());
             }
         }
     }
@@ -105,7 +158,7 @@ public class DataManager {
             File dir = new File(dataRoot, rank.name());
             if (!dir.exists() || !dir.isDirectory()) continue;
 
-            File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
+            File[] files = dir.listFiles((d, name) -> name.toLowerCase(Locale.ROOT).endsWith(".yml"));
             if (files == null) continue;
 
             for (File file : files) {
@@ -135,6 +188,17 @@ public class DataManager {
                     grants.forEach(pd::grantCommand);
                     revokes.forEach(pd::revokeCommand);
                     notes.forEach(pd::addNote);
+
+                    // wallet
+                    ConfigurationSection walletSec = cfg.getConfigurationSection("wallet");
+                    if (walletSec != null) {
+                        for (String key : walletSec.getKeys(false)) {
+                            double bal = walletSec.getDouble(key, 0.0);
+                            if (bal > 0.0) {
+                                pd.setBalance(key, bal);
+                            }
+                        }
+                    }
 
                     dataMap.put(uuid, pd);
                 } catch (Exception ex) {

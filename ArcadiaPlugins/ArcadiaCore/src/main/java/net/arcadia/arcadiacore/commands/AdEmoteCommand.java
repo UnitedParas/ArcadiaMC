@@ -87,7 +87,11 @@ public class AdEmoteCommand implements CommandExecutor, TabCompleter {
         var loc = target.getLocation().clone();
         loc.setYaw(loc.getYaw() + 180);
         loc.add(loc.getDirection().normalize());
+        //FIX. set y to y+1 so user doesnt get stuck in a block lmfao
+        loc.setY(target.getLocation().getY() + 1);
+        
         user.teleport(loc);
+
 
         target.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 40, 0, false, false, false));
         target.sendActionBar(Component.text("お前はも、う死んでいる。").color(TextColor.color(0xFF0000)));
